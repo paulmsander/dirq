@@ -1,0 +1,239 @@
+.TH dirqst 1
+
+.SH NAME
+
+.LP
+dirqst \- Display or modify the state of a directory in a directory queue.
+
+.SH SYNOPSIS
+
+.LP
+.B dirqst
+[\fB-d\fR]
+[\fB-f \fIfile\fR]
+[\fB-L\fR]
+[\fB-n\fR]
+.I directory
+[\fIstate\fR[\fB=\fR[\fIvalue\fR]]]...
+
+.SH DESCRIPTION
+
+.LP
+A directory queue is a collection of directories that share a common
+parent directory.
+Each directory in the queue has its own state, and is named with a prefix,
+an optional datestamp, and a serial number.
+The prefix is shared by all directories in a queue.
+The parent directory and prefix uniquely identify a queue, which is also
+given a symbolic name or
+.BR type-name .
+(Multiple directory queues may share the same parent directory.)
+
+.LP
+Directory queues have a maximum length; when full, directories are
+removed from the queue to make room for new ones.
+Directories are removed based on the results of a quality assessment.
+The assessment is done by comparing applicable state values stored in each
+directory.
+When necessary, the directory of lowest quality is removed from the queue,
+with the following exceptions:
+Directories marked as
+.B persistent
+are never removed;
+The newest directory is never removed, and a directory of the next higher
+level of quality is removed instead;
+In the event that multiple directories share the lowest quality assessment,
+the oldest is removed.
+
+.LP
+The
+.B dirqst
+program is used to query and modify the state stored in a directory that
+is contained by a directory queue.
+By default, the entire state of the directory is displayed.
+Values of specific states can be displayed, with default values if
+they've never been set.
+State values can also be set to new values or cleared.
+When state values are changed, their old values are displayed before the
+modification is stored.
+(This feature implements a kind of "test-and-swap" capability that can
+be used by a high-level locking mechanism.)
+State value assignments can also be validated without being stored.
+
+.LP
+State names must begin with a letter, and may contain letters, digits,
+the hyphen, and the underscore.
+State values can contain any printable ASCII characters, must be contained
+in a single line of text, and must begin with a character that is not
+whitespace.
+When assigning a value to a state, if the state is specified in the
+.B status
+section of the
+.B dirq.dat
+file, then the value must be one of the values specified.
+If the state is not specified in the
+.B dirq.dat
+file, then the value can any legal string.
+
+.LP
+The output of the
+.B dirqst
+program is written to the standard output stream.
+Each state value is listed on its own line.
+The format of each line of output is as follows:
+
+.RS 1i
+.LP
+\fIstate\fB=\fIvalue\fR
+.RE
+
+.LP
+When querying or modifying a directory, the
+.B dirqst
+program employs a locking mechanism to prevent concurrent accesses.
+This mechanism may be defeated if the
+.B dirqst
+program is part of a larger system that performs locking at a different
+level.
+The
+.B dirqst
+program's built-in locking mechanism is not related to the
+"test-and-swap" feature described above.
+
+.LP
+Every directory managed by the
+.B dirq
+and
+.B dirqst
+programs have a
+.B dirq
+state.
+This state can have one of the following values:
+.BR initialized ,
+.BR preserved ,
+.BR removing ,
+.BR interrupted ,
+.BR created ,
+and
+.BR uninitialized .
+The
+.B initialized
+value is the directory's usual state, indicating that it was
+created correctly and may be used normally.
+The
+.B preserved
+value means that the directory is exempt from removal.
+The
+.B removing
+value means that the
+.B dirq
+program is in the process of removing the directory.
+The
+.B interrupted
+value indicates an extraordinary condition in which the
+.B dirq
+program was interrupted while it was creating or removing the directory.
+The
+.B created
+value indicates an extraordinary condition in which the directory has been
+created but the directory's state has not been properly initialized.
+The
+.B uninitialized
+value is the default value that is shown if the
+.B dirq
+state has been unset for some reason.
+
+.LP
+Of these six values, the
+.BR created ,
+.BR preserved ,
+and
+.B removing
+states are persistent, exempting the directory from removal by the
+.B dirq
+program.
+This is to prevent concurrent instances of the program from operating
+on the directory simultaneously.
+The remaining values,
+.BR initialized ,
+.BR interrupted ,
+and
+.B uninitialized
+permit the removal of the directory.
+Directories where the
+.B dirq
+state is set to the
+.B uninitialized
+or
+.B interrupted
+values will be removed before directories having the
+.B dirq
+state set to the
+.B initialized
+value.
+
+
+.SH OPTIONS
+
+.IP \fB-d\fR .5i
+Displays the default value(s) of state(s) if they've never been set.
+States are not normally displayed if they have never been set.
+
+.IP \fB-f\fIfile\fR .5i
+Overrides the default directory queue description file.
+The default is a file named
+.B dirq.dat
+that is located in the directory containing the
+.B dirqst
+program, or in a directory named
+.B lib
+that is a sibling of the directory containing the
+.B dirqst
+program.
+
+.IP \fB-L\fR .5i
+Disables directory-level locking when reading and modifying a directory.
+Using this option is discouraged, but may be useful when the
+.B dirqst
+program is part of a larger system that performs locking at a different
+level.
+
+.IP \fB-n\fR .5i
+Performs queries and validates state assignments without actually
+altering the state of the directory.
+
+.IP \fIdirectory\fR .5i
+Specifies the directory whose state is read or modified.
+This directory must have been created by the
+.B dirq
+program.
+
+.IP \fIstate\fR .5i
+Specifies the name of a state value to be displayed.
+
+.IP \fIstate\fB=\fR .5i
+Unsets the value of the given
+.IR state .
+
+.IP \fIstate\fB=\fIvalue\fR .5i
+Sets the given
+.I state
+to the specified
+.IR value .
+When assigning a value to a state, if the state is specified in the
+.B status
+section of the dirq.dat file, then the value must be one of the
+values specified.  If the state is not specified in the
+.B dirq.dat
+file, then the value can be any legal string.
+
+.LP
+Any number of of the above three queries and assignments can be mixed
+on the command line.
+
+.SH SEE ALSO
+
+.LP
+dirq(1)
+.br
+dirq.dat(5)

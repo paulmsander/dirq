@@ -1,0 +1,41 @@
+# type records:
+# keyword type sequence parentdir prefix length state...
+# sequence = "stamp" or "serial"
+# minimum length = 2
+# states used for quality assessment, dirq always included
+
+type temporary	stamp	/tmp dirqtmp	4 dirq
+type build		stamp	/tmp build		4 dirq build test
+type release	serial	/tmp release	4 dirq release
+
+# status records:
+# keyword action state value priority weight
+# lower weight = deleted sooner
+# priority = persistent or removable
+
+status default		dirq    uninitialized	removable  0
+status interrupt	dirq    interrupted		removable  0
+status initialize	dirq    initialized		removable  10
+status create		dirq    created			persistent 1000
+status remove		dirq    removing		persistent 1000
+status preserve		dirq    preserved		persistent 1000
+
+status default		build	uninitialized	removable  0
+status none			build   interrupted		removable  0
+status none			build   fail			removable  100
+status none			build   succeed			removable  180
+status none			build	inprogress		persistent 1000
+
+status default		release	uninitialized	removable  0
+status none			release interrupted		removable  0
+status none			release fail			removable  400
+status none			release succeed			removable  600
+status none			release inprogress		persistent 1000
+
+status default		test	uninitialized	removable  +0
+status none			test    interrupted		removable  +0
+status none			test    fail			removable  +30
+status none			test    none			removable  +70
+status none			test    pass			removable  +220
+status none			test	inprogress		persistent 1000
+

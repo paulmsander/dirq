@@ -1,0 +1,281 @@
+.TH dirq 1
+
+.SH NAME
+
+.LP
+dirq \- Create and delete directories in a directory queue.
+
+.SH SYNOPSIS
+
+.LP
+.B dirq
+[\fB-f \fIfile\fR]
+[\fB-L\fR]
+[\fB-n\fR]
+[\fB-N \fIlength\fR]
+[\fB-p\fR]
+[\fB-P \fIprefix\fR]
+[\fB-r\fR]
+.I type-name
+[\fIstate\fB=\fIvalue\fR]...
+
+.LP
+.B dirq
+[\fB-f \fIfile\fR]
+.B -l
+[\fB-L\fR]
+[\fB-P \fIprefix\fR]
+[\fB-s\fR[\fB-d\fR] | \fB-w\fR]
+.I type-name
+
+.LP
+.B dirq
+[\fB-f \fIfile\fR]
+.B -t
+[\fItype-name\fR]
+
+.SH DESCRIPTION
+
+.LP
+A directory queue is a collection of directories that share a common
+parent directory.
+Each directory in the queue has its own state, and is named with a prefix,
+an optional datestamp, and serial number.
+The prefix is shared by all directories in a queue.
+The parent directory and prefix uniquely identify a queue, which is also
+given a symbolic name or
+.BR type-name .
+(Multiple directory queues may share the same parent directory.)
+
+.LP
+Directory queues have a maximum length; when full, directories are
+removed from the queue to make room for new ones.
+Directories are removed based on the results of a quality assessment.
+The assessment is done by comparing applicable state values stored in each
+directory.
+When necessary, the directory of lowest quality is removed from the queue,
+with the following exceptions:
+Directories marked as
+.B persistent
+are never removed;
+The newest directory is never removed, and a directory of the next higher
+level of quality is removed instead;
+In the event that multiple directories share the lowest quality assessment,
+the oldest is removed.
+
+.LP
+The
+.B dirq
+program is used to create a directory in a queue (removing others if
+necessary), and initialize its state.
+It is also used to query the state of the queue.
+
+.LP
+The operation of the
+.B dirq
+program is determined by the contents of the
+.B dirq.dat
+file,
+which contains the specifications of each directory queue and the
+important state values.
+That file is located either in the directory containing the
+.B dirq
+program, or in a program named "lib" that is a sibling of the directory
+containing the
+.B dirq
+program, or it is identified on the command line.
+
+.LP
+To create a directory, invoke the
+.B dirq
+program with the queue's
+.I type-name
+as a command line argument.
+The name of the new directory is written to the standard output stream.
+State values may be set as with the
+.B dirqst
+program.
+The predecessor of the new directory is written to the standard output
+stream after the new directory's name (or a blank line if the new
+directory is the first directory in the queue) when the
+.B -p
+argument is given.
+Removed directories are written to the standard output stream following the
+predecessor directory (if present, otherwise the new directory) if the
+.B -r
+argument is given.
+
+.P
+The default prefix that appears at the beginning of each directory's name is
+specified in the
+.B dirq.dat
+file,
+but it can be overridden with the
+\fB-P \fIprefix\fR
+parameter.
+This allows multiple directory queues of the same type.
+
+.P
+The default length of each queue is specified in the
+.B dirq.dat
+file,
+but it can be overridden with the
+\fB-N \fIlength\fR
+parameter.
+This allows each queue of a given type to have a different length.
+
+.P
+A no-op feature is also provided to test the actions of the
+.B dirq
+program without actually modifying a queue.
+This is useful for predicting which directories will be removed the
+next time a directory is created.
+
+.LP
+Giving the
+.B -l
+option lists the contents of a given queue.
+By default, the paths to the directories are listed, one per line, to the
+standard output stream.
+The
+.B -s
+option lists the status values that are involved in the quality assessment.
+The
+.B -d
+option displays default status values if some states are not set.
+The
+.B -w
+option displays the quality and persistence of each directory, and the
+state that produced that level of quality and persistence.
+
+.LP
+The
+.B -t
+option produces a list of available queues.
+Providing a queue
+.I type-name
+queries the existence of the given queue type.
+Each line of output lists the queue's type name, parent directory,
+default prefix,
+and default queue length, separated by white space.
+(The exit status is non-zero if the queue type does not exist.)
+
+.LP
+The
+.B dirq
+program employs a locking mechanism to prevent concurrent changes to a
+queue.
+This mechanism can be defeated if the
+.B dirq
+program is part of a larger system that performs locking at a different
+level.
+
+.LP
+Output is normally written to the standard output stream.
+The format is predictable so that it can be easily scanned by other
+software.
+
+.LP
+Diagnostic messages are written to the standard error stream.
+The exit code is normally zero; it is non-zero in the event of an error
+or if a query for a specific queue type fails.
+
+.SH OPTIONS
+
+.IP \fB-d\fR .5i
+In conjunction with the
+.B -s
+argument, displays default values of unset states.
+
+.IP \fB-f\fIfile .5i
+Specifies the
+.B dirq.dat(5)
+file to be used for this invocation of the
+.B dirq
+program.
+
+.IP \fB-l\fR .5i
+Produces a listing of directories contained in a given queue.
+
+.IP \fB-L\fR .5i
+Disables directory-level locking when modifying the contents of the
+queue.
+Using this option is discouraged, but may be useful when the
+.B dirq
+program is part of a larger system that performs locking at a different
+level.
+
+.IP \fB-n\fR .5i
+No-op.
+This option causes the
+.B dirq
+program to produce the output that it normally would, without actually
+modifying a queue.
+This is useful for predicting which directories will be deleted next.
+
+.IP \fB-N\fIlength\fR .5i
+Specifies the length of the queue, overriding the default value set in the
+.B dirq.dat
+file.
+
+.IP \fB-p\fR .5i
+When creating a new directory, write the path to the predecessor after
+the path to the new directory to the standard output stream.
+
+.IP \fB-P\fIprefix\fR .5i
+Specifies the prefix that appears at the beginning of the name of each
+directory in a queue.
+The default is specified in the
+.B dirq.dat(5)
+file.
+
+.IP \fB-r\fR .5i
+When creating a new directory, list those removed to the standard output
+stream.
+This follows the predecessor directory path (if the
+.B -p
+option is given) or the new directory path.
+
+.IP \fB-s\fR .5i
+When listing the contents of a directory queue, writes the values of
+important states to the standard output stream after each directory path,
+followed by a blank line.
+
+.IP \fB-t\fR .5i
+Produces a listing of directory queue types.
+If a
+.I type-name
+is given as a parameter, queries the existence of that queue type.
+
+.IP \fB-w\fR .5i
+When listing the contents of a directory queue, writes the quality
+assessment of each directory to the standard output stream.
+The output consists of one line per directory contained by the queue.
+Each line contains the path to the directory, the keyword
+.B persistent
+or
+.BR removable ,
+the directory's weight (higher weight means higher quality),
+the state that produces the weight, and the value of the state (if set).
+
+.IP \fIstate\fB=\fIvalue\fR .5i
+Initializes the given
+.I state
+to the given
+.I value
+at the moment a new directory is created.
+Multiple states may be initialized in this way.
+When assigning a value to a state, if the state is specified in the
+.B status
+section of the dirq.dat file, then the value must be one of the
+values specified.  If the state is not specified in the
+.B dirq.dat
+file, then the value can be any legal string.
+
+.SH SEE ALSO
+
+.LP
+dirq.dat(5)
+.br
+dirqst(1)
+

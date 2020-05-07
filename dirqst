@@ -1,0 +1,438 @@
+#!/bin/sh
+
+# The dirqst script displays or modifies the status of a directory in a
+# directory queue.
+
+# This script was placed in the public domain by its author, Paul Sander
+# (paul@wakawaka.com).
+
+# Identify platform, set platform-specific features.
+
+platform=`uname`
+if [ $? != 0 -o "x$platform" = "xWindows_NT" ]
+then
+	platform="Windows"
+	nulldev="NUL:"
+	sep="\\"
+	qsep="\\\\"
+	msep="\\\\"
+	tmp="$TEMP"
+else
+	nulldev="/dev/null"
+	sep="/"
+	qsep="/"
+	msep="\\/"
+	if [ "x$TEMP" != "x" ]
+	then
+		tmp="$TEMP"
+	elif [ "x$TMP" != "x" ]
+	then
+		tmp="$TMP"
+	elif [ "x$TEMPDIR" != "x" ]
+	then
+		tmp="$TEMPDIR"
+	elif [ "x$TMPDIR" != "x" ]
+	then
+		tmp="$TMPDIR"
+	else
+		tmp="/tmp"
+	fi
+fi
+
+# Identify self
+
+me=`basename "$0"`
+here=`pwd`
+
+if expr "x$0" : "x${qsep}" > "$nulldev"
+then
+	mypath="$0"
+elif expr "x$0" : "x.*${qsep}" > "$nulldev"
+then
+	mypath="$here${sep}$0"
+else
+	for d in `echo "$PATH" | sed -e 's/:/ /g'`
+	do
+		if [ -f "$d${qsep}$0" -a -x "$d${qsep}$0" ]
+		then
+			mypath="$d${sep}$0"
+			break
+		fi
+	done
+	if [ "x$mypath" = "x" ]
+	then
+		mypath="$0"
+	fi
+fi
+
+# Save location of me
+
+mydir=`dirname "$mypath"`
+
+# Compute location of dirq.dat file
+
+dirqdat="${mydir}${sep}dirq.dat"
+if [ ! -f "${dirqdat}" ]
+then
+	dirqdat=`dirname "${mydir}"`"${sep}lib${sep}dirq.dat"
+	if [ ! -f "${dirqdat}" ]
+	then
+		dirqdat="${nulldev}"
+	fi
+fi
+
+# Display a usage message
+
+usage() {
+cat << EOF
+${me}:  Usage:
+${me}:  ${me} [-d] [-f file] [-L] [-n] directory [state[=[value]]]...
+${me}:  -d = Displays default value of state if never set
+${me}:  -f file = specifies dirq data file (default $dirqdat)
+${me}:  -L = defeats locking (not recommended)
+${me}:  -n = no-op; checks assignments without modifying directory state
+${me}:  directory = directory in a queue
+${me}:  state = name of state variable, by default displays all variables
+${me}:  value = new value to be stored in state variable
+EOF
+}
+
+# This is for the MKS Korn shell, to make it perform case-sensitive case
+# switches.
+
+DUALCASE=1
+
+# Scan the command line
+
+bad=0
+debug=0
+default=0
+nolock=0
+nop=0
+while getopts "df:hLnX" c
+do
+	case "$c" in
+	d)
+		default=1
+		;;
+	f)
+		dirqdat="$OPTARG"
+		;;
+	h)
+		usage
+		exit 0
+		;;
+	L)
+		nolock=1
+		;;
+	n)
+		nop=1
+		;;
+	X)
+		debug=1
+		;;
+	esac
+	shift `expr $OPTIND - 1`
+	OPTIND=1
+done
+
+# Check that the $dirqdat file exists and is readable.
+
+if [ ! -f "$dirqdat" ]
+then
+	echo "${me}: Data file $dirqdat does not exist" 1>&2
+	bad=1
+elif [ ! -r "$dirqdat" ]
+then
+	echo "${me}: Data file $dirqdat is not readable" 1>&2
+	bad=1
+fi
+
+# Check the directory to be sure it was created by dirq and the user has
+# access.
+
+if [ $# -lt 1 ]
+then
+	echo "${me}: A directory must be specified on the command line." 1>&2
+	bad=1
+else
+	dir="$1"
+	shift
+	if [ ! -d "$dir" -o ! -w "$dir" ]
+	then
+		echo "${me}: $dir is not a directory, or" 1>&2
+		echo "${me}: it is not writable." 1>&2
+		exit 2
+	fi
+	statefile="${dir}${sep}.dirq.state"
+	if [ ! -f "$statefile" -o ! -r "$statefile" ]
+	then
+		echo "${me}: $statefile is not readable, or" 1>&2
+		echo "${me}: $dir was not created by dirq." 1>&2
+		exit 2
+	fi
+
+	# Check the remaining command line arguments for syntax.
+	# Also verify that no state is assigned more than once.
+
+	if [ $# -ge 1 ]
+	then
+
+		# Initialize list of assigned state variables
+		assigned=
+
+		for p
+		do
+
+			# Get state variable name and remember if it's an assignment
+			assnflg=0
+			id=`expr "x$p" : 'x\([^=]*\)='`
+			if [ $? = 0 ]
+			then
+				assnflg=1
+			else
+				id="$p"
+			fi
+
+			# Check the state variable's name and value and repeat assignment
+			expr "x$id" : 'x[A-Za-z][A-Za-z0-9\-_]*$' > "$nulldev"
+			if [ $? != 0 ]
+			then
+				echo "${me}: \"$id\" is not a proper state name." 1>&2
+				bad=1
+			elif [ $assnflg != 0 ]
+			then
+				expr "x $assigned " : "x.* $id " > "$nulldev"
+				if [ $? = 0 ]
+				then
+					echo "${me}: Cannot assign to \"$id\" more than once." 1>&2
+					bad=1
+				else
+					assigned="${assigned} ${id}"
+				fi
+
+				# Entire argument must contain printable characters; no
+				# controls, newlines, etc. are allowed.  First character of
+				# the new state value must be non-blank.
+				expr "x$p" : 'x[A-Za-z][A-Za-z0-9\-_]*=[!-~][ -~]*$' > "$nulldev"
+				if [ $? != 0 ]
+				then
+					expr "x$p" : 'x[A-Za-z][A-Za-z0-9\-_]*=$' > "$nulldev"
+					if [ $? != 0 ]
+					then
+						echo "${me}: Value of $id is invalid." 1>&2
+						bad=1
+					fi
+				fi
+			fi
+		done
+	fi
+fi
+
+# Check values of state assignments.
+
+if [ $bad = 0 ]
+then
+	if [ $# -ge 1 ]
+	then
+		(
+			# Read status values from dirq.dat file and pass to awk.
+			sed -e 's/[ 	][ 	]*/ /g' -e '/^[ 	]*$/d' \
+			    -e '/^#/d' "$dirqdat" |
+			grep '^status '
+
+			# Convert command line assignments to usable stream.
+			for p
+			do
+				id=`expr "x$p" : 'x\([^=]*\)='`
+				if [ $? = 0 ]
+				then
+					val=`expr "x$p" : 'x[^=]*=\(.*\)$'`
+					echo "x" "$id" "$val"
+				fi
+			done
+		) |
+
+		# Awk script reads valid status values from dirq.dat file, then
+		# for states defined in the file, verify that values are valid.
+		# Ignore states not listed in the dirq.dat file.
+		awk '
+		BEGIN { sts = 0 }
+		$1 == "status" {
+				if ( st[$3] == "" ) { st[$3] = " " }
+				st[$3] = st[$3] $4 " "
+			}
+		$1 != "status" && st[$2] != "" && $3 != "" && \
+			index(st[$2]," " $3 " ") == 0 {
+				print stderr me ": State " $2 " is assigned an invalid value."
+				sts=2
+			}
+		END { exit sts }
+		' "me=$me"
+
+		if [ $? != 0 ]
+		then
+			bad=1
+		fi
+	fi
+fi
+
+# Exit if command line is bad.
+
+if [ $bad != 0 ]
+then
+	usage 1>&2
+	exit 2
+fi
+
+# Set up temporary file.
+
+locked=0
+editstate=0
+tf1="${dir}${sep}.dirq.state.$$"
+tf2="${tmp}${sep}${me}.$$.1"
+tf3="${tmp}${sep}${me}.$$.2"
+tf4="${tmp}${sep}${me}.$$.3"
+lk1="${dir}${sep}.dirq.lock"
+
+# Clean up lock and temporary files upon exit or signal.
+
+cleanup() {
+	rm -f "${tf2}" "${tf3}" "${tf4}"
+	if [ $editstate != 0 ]
+	then
+		rm -f "${tf1}"
+	fi
+	if [ $locked != 0 ]
+	then
+		rmdir "${lk1}" 2> "$nulldev"
+		locked=0
+	fi
+}
+
+trap cleanup 0
+trap "cleanup; exit 2" 1 2 3 5 13 15
+
+# Obtain a lock.  Note race condition on the while statement, could leave
+# a lock if the machine crashes or "kill -9" occurs right there.
+
+if [ $nolock = 0 ]
+then
+	cnt=0
+	mkdir "${lk1}" > "$nulldev" 2> "$nulldev"
+	while [ $? != 0 ]
+	do
+		line=`ls -ld "$lk1" 2> "$nulldev"`
+		if [ "x$line" != "x" ]
+		then
+			if [ $cnt = 0 ]
+			then
+				owner=`echo "$line" | sed -e 's/[ 	][ 	]*/ /g' | cut '-d ' -f 3`
+				echo "${me}: Waiting for ${owner}'s lock on ${dir}" 1>&2
+				cnt=5
+			fi
+			cnt=`expr $cnt - 1`
+			sleep 1
+		fi
+		mkdir "${lk1}" > "$nulldev" 2> "$nulldev"
+	done
+	locked=1
+fi
+
+# If there are no remaining command line arguments, dump the status file.
+# Otherwise, write sed scripts to modify and display selected records.
+
+editstate=1
+> "$tf2"
+> "$tf3"
+
+if [ $nop = 0 ]
+then
+	> "$tf1"
+fi
+
+if [ $# -gt 0 ]
+then
+	for p
+	do
+		id=`expr "x$p" : 'x\([^=]*\)='`
+		if [ $? = 0 ]
+		then
+			if [ $nop = 0 ]
+			then
+
+				# Argument is assignment
+				expr "x$p" : 'x\([^=]*\)=$' > "$nulldev"
+				if [ $? != 0 ]
+				then
+					# Write new state to new state file
+					echo "$p" >> "$tf4"
+				fi
+				# Edit old state from existing state file
+				echo "/^${id}=/d" >> "$tf2"
+			fi
+		else
+			# Argument is state name, edit new state file to display it
+			echo "/^${p}=/p" >> "$tf3"
+		fi
+	done
+
+	# Don't display anything that's not explicitly selected
+
+	echo "d" >> "$tf3"
+
+	# Perform edits and sort the result.  This is done in this order to
+	# minimize the number of temp files required.
+
+	if [ $nop = 0 ]
+	then
+		sed -f "$tf2" "$statefile" >> "$tf4"
+		sort "-t=" -k 0,1 "$tf4" > "$tf1"
+	fi
+fi
+
+# Display contents of state file before edits.  This allows for a kind
+# of "test and swap" capability, which might come in handy someday.
+# If requested, join the state values with defaults from $dirqdat
+# and display.  Some gymnastics are done with the join to make sure
+# that uninitialized conditions never collide with valid initialized
+# conditions:  Field separators are converted to tabs before the sort,
+# and converted back after the cut filter.
+
+if [ $default != 0 ]
+then
+
+	# Fetch default state values.
+
+	sed -e 's/[ 	][ 	]*/	/g' "$dirqdat" |
+	awk '
+	BEGIN {
+		FS="	"
+		OFS="	"
+	}
+	$1 == "status" && $2 == "default" { print $3,$4 }
+	' |
+	sort "-t	" -k 0,1 > "$tf4"
+
+	# Convert state file leading "=" to tab, sort, join, filter, and restore
+	# to original format.
+
+	sed -e 's/=/	/' "$statefile" |
+	sort "-t	" -k 0,1 |
+	join -a1 -a2 '-t	' -11 -21 -o 1.1 1.2 2.1 2.2 - "$tf4" |
+	cut '-d	' -f1,2 |
+	sed -e 's/	/=/'
+else
+	cat "$statefile"
+fi |
+sed -f "$tf3"
+
+# Replace the state file with the edited copy.
+
+if [ $# -gt 0 -a $nop = 0 ]
+then
+	mv "$tf1" "$statefile"
+fi
+
+exit 0
+

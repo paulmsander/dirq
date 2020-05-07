@@ -1,0 +1,1052 @@
+#!/bin/sh
+
+# The dirq script creates a directory in a directory queue, removing others
+# as needed to keep the length constant.
+
+# This script was placed in the public domain by its author, Paul Sander
+# (paul@wakawaka.com).
+
+# Identify platform, set platform-specific features.
+
+platform=`uname`
+if [ $? != 0 -o "x$platform" = "xWindows_NT" ]
+then
+	platform="Windows"
+	nulldev="NUL:"
+	sep="\\"
+	qsep="\\\\"
+	msep="\\\\"
+	tmp="$TEMP"
+else
+	nulldev="/dev/null"
+	sep="/"
+	qsep="/"
+	msep="\\/"
+	if [ "x$TEMP" != "x" ]
+	then
+		tmp="$TEMP"
+	elif [ "x$TMP" != "x" ]
+	then
+		tmp="$TMP"
+	elif [ "x$TEMPDIR" != "x" ]
+	then
+		tmp="$TEMPDIR"
+	elif [ "x$TMPDIR" != "x" ]
+	then
+		tmp="$TMPDIR"
+	else
+		tmp="/tmp"
+	fi
+fi
+
+# Identify self
+
+me=`basename "$0"`
+here=`pwd`
+
+if expr "x$0" : "x${qsep}" > "$nulldev"
+then
+	mypath="$0"
+elif expr "x$0" : "x.*${qsep}" > "$nulldev"
+then
+	mypath="$here${sep}$0"
+else
+	for d in `echo "$PATH" | sed -e 's/:/ /g'`
+	do
+		if [ -f "$d${qsep}$0" -a -x "$d${qsep}$0" ]
+		then
+			mypath="$d${sep}$0"
+			break
+		fi
+	done
+	if [ "x$mypath" = "x" ]
+	then
+		mypath="$0"
+	fi
+fi
+
+# Save location of me
+
+mydir=`dirname "$mypath"`
+
+# Compute location of dirq.dat file
+
+dirqdat="${mydir}${sep}dirq.dat"
+if [ ! -f "${dirqdat}" ]
+then
+	dirqdat=`dirname "${mydir}"`"${sep}lib${sep}dirq.dat"
+	if [ ! -f "${dirqdat}" ]
+	then
+		dirqdat="${nulldev}"
+	fi
+fi
+
+# Locate the dirqst script
+
+dirqst="${mydir}${sep}dirqst"
+
+# Display a usage message
+
+usage() {
+cat << EOF
+${me}:  Usage:
+${me}: ${me} [-f file] -t [type-name]
+${me}: ${me} [-f file] -l [-L][-P prefix][-s[-d]|-w] type-name
+${me}: ${me} [-f file] [-L][-n][-N length][-p][-P prefix][-r] type-name \\
+${me}:       [state=value]...
+${me}: -d = displays default value of states if unset
+${me}: -f file = specifies ${me} data file (default $dirqdat)
+${me}: -l = lists contents of queue
+${me}: -L = defeats locking (not recommended)
+${me}: -n = no op; does not create or remove directories, but lists what
+${me}:      would happen if -n were omitted
+${me}: -N length = overrides queue's length given in the ${me} data file
+${me}: -p = displays predecessor after new directory, or blank line if none
+${me}: -P prefix = overrides queue's prefix given in the ${me} data file
+${me}: -r = displays directories removed (if any) after new directory or
+${me}:      predecessor
+${me}: -s = displays important state values after each directory in queue
+${me}: -t = lists queue types
+${me}: -w = displays highest priority and weight after each directory in queue
+${me}: state = name of state variable to be initialized
+${me}: value = new value to be stored in state variable
+EOF
+}
+
+# This is for the MKS Korn shell, to make it perform case-sensitive case
+# switches.
+
+DUALCASE=1
+
+# Scan the command line
+
+bad=0
+debug=0
+default=
+length=
+list=0
+listpred=0
+listrm=0
+liststate=0
+listtypes=0
+listweight=0
+nolock=
+nop=0
+prefix=
+qtype=
+while getopts "df:hlLnN:pP:rstwX" c
+do
+	case "$c" in
+	d)
+		default="-d"
+		;;
+	f)
+		dirqdat="$OPTARG"
+		;;
+	h)
+		usage
+		exit 0
+		;;
+	l)
+		list=1
+		;;
+	L)
+		nolock="-L"
+		;;
+	n)
+		nop=1
+		;;
+	N)
+		length="$OPTARG"
+		;;
+	p)
+		listpred=1
+		;;
+	P)
+		prefix="$OPTARG"
+		;;
+	r)
+		listrm=1
+		;;
+	s)
+		liststate=1
+		;;
+	t)
+		listtypes=1
+		;;
+	w)
+		listweight=1
+		;;
+	X)
+		debug=1
+		;;
+	esac
+	shift `expr $OPTIND - 1`
+	OPTIND=1
+done
+
+
+# Fetch queue type.
+
+if [ $# -ge 1 ]
+then
+	qtype="$1"
+	shift
+fi
+
+# Save initial state.
+
+initstate="$@"
+
+
+# Check command line
+
+if [ $listtypes != 0 ]
+then
+	if [ $list != 0 ]
+	then
+		echo "${me}: -l and -t are incompatible." 1>&2
+		bad=1
+	fi
+
+	if [ "x$nolock" != "x" ]
+	then
+		echo "${me}: WARNING: -L has no effect in combination with -t" 1>&2
+	fi
+fi
+
+if [ $liststate != 0 ]
+then
+	if [ $list = 0 ]
+	then
+		echo "${me}: -s requires -l" 1>&2
+		bad=1
+	fi
+
+	if [ $listweight != 0 ]
+	then
+		echo "${me}: -s is incompatible with -w" 1>&2
+		bad=1
+	fi
+fi
+
+if [ "x$default" != "x" -a $liststate = 0 ]
+then
+	echo "${me}: -d requires -l and -s" 1>&2
+	bad=1
+fi
+
+if [ $listweight != 0 ]
+then
+	if [ $list = 0 ]
+	then
+		echo "${me}: -w requires -l" 1>&2
+		bad=1
+	fi
+fi
+
+if [ $listpred != 0 ]
+then
+	if [ $list != 0 ]
+	then
+		echo "${me}: -p is incompatible with -l" 1>&2
+		bad=1
+	fi
+
+	if [ $listtypes != 0 ]
+	then
+		echo "${me}: -p is incompatible with -t" 1>&2
+		bad=1
+	fi
+fi
+
+if [ "x$length" != "x" ]
+then
+	if [ $list != 0 ]
+	then
+		echo "${me}: -N is incompatible with -l" 1>&2
+		bad=1
+	fi
+
+	if [ $listtypes != 0 ]
+	then
+		echo "${me}: -N is incompatible with -t" 1>&2
+		bad=1
+	fi
+
+	expr "x$length" : 'x[0-9][0-9]*$' > "$nulldev"
+	if [ $? != 0 ]
+	then
+		echo "${me}: A non-numeric length was given." 1>&2
+		bad=1
+	elif [ $length -lt 2 ]
+	then
+		echo "${me}: The length must be 2 or greater." 1>&2
+		bad=1
+	fi
+fi
+
+if [ "x$prefix" != "x" ]
+then
+	if [ $listtypes != 0 ]
+	then
+		echo "${me}: -P is incompatible with -t" 1>&2
+		bad=1
+	fi
+
+	expr "x$prefix" : 'x[A-Za-z][-A-Za-z0-9_]*$' > "$nulldev"
+	if [ $? != 0 ]
+	then
+		echo "${me}: Invalid -P prefix \"$prefix\"" 1>&2
+		bad=1
+	fi
+fi
+
+if [ $listrm != 0 ]
+then
+	if [ $list != 0 ]
+	then
+		echo "${me}: -r is incompatible with -l" 1>&2
+		bad=1
+	fi
+
+	if [ $listtypes != 0 ]
+	then
+		echo "${me}: -r is incompatible with -t" 1>&2
+		bad=1
+	fi
+fi
+
+expr "x$qtype" : 'x[A-Za-z0-9\-_]*$' > "$nulldev"
+if [ $? != 0 ]
+then
+	echo "${me}: An invalid queue type was given" 1>&2
+	bad=1
+fi
+
+if [ ! -f "$dirqdat" ]
+then
+	echo "${me}: Data file $dirqdat does not exist" 1>&2
+	bad=1
+elif [ ! -r "$dirqdat" ]
+then
+	echo "${me}: Data file $dirqdat is not readable" 1>&2
+	bad=1
+fi
+
+if [ $listtypes = 0 -a $list = 0 -a "x$qtype" = "x" ]
+then
+	echo "${me}: Must give -l, -t, or type-name" 1>&2
+	bad=1
+fi
+
+# Check values of state assignments.
+
+if [ $bad = 0 ]
+then
+	if [ $# -ge 1 ]
+	then
+		(
+			# Read status values from dirq.dat file and pass to awk.
+			sed -e 's/[ 	][ 	]*/ /g' -e '/^[ 	]*$/d' \
+			    -e '/^#/d' "$dirqdat" |
+			grep '^status '
+
+			# Convert command line assignments to usable stream.
+			for p
+			do
+				id=`expr "x$p" : 'x\([^=]*\)='`
+				if [ $? = 0 ]
+				then
+					val=`expr "x$p" : 'x[^=]*=\(.*\)$'`
+					echo "x" "$id" "$val"
+				fi
+			done
+		) |
+
+		# Awk script reads valid status values from dirq.dat file, then
+		# for states defined in the file, verify that values are valid.
+		# Ignore states not listed in the dirq.dat file.
+		awk '
+		BEGIN { sts = 0 }
+		$1 == "status" {
+				if ( st[$3] == "" ) { st[$3] = " " }
+				st[$3] = st[$3] $4 " "
+			}
+		$1 != "status" && st[$2] != "" && $3 != "" && \
+			index(st[$2]," " $3 " ") == 0 {
+				print stderr me ": State " $2 " is assigned an invalid value."
+				sts=2
+			}
+		END { exit sts }
+		' "me=$me"
+
+		if [ $? != 0 ]
+		then
+			bad=1
+		fi
+	fi
+fi
+
+if [ $bad != 0 ]
+then
+	usage 1>&2
+	exit 2
+fi
+
+if [ $debug != 0 ]
+then
+	echo "${me}: dirqdat = $dirqdat" 1>&2
+	echo "${me}: list = $list" 1>&2
+	echo "${me}: listpred = $listpred" 1>&2
+	echo "${me}: listrm = $listrm" 1>&2
+	echo "${me}: liststate = $liststate" 1>&2
+	echo "${me}: listtypes = $listtypes" 1>&2
+	echo "${me}: listweight = $listweight" 1>&2
+	echo "${me}: nolock = $nolock" 1>&2
+	echo "${me}: prefix = $prefix" 1>&2
+	echo "${me}: qtype = $qtype" 1>&2
+fi
+
+# This function normalizes whitespace in a file.
+
+normalwhite() {
+	sed -e '/^#/d' -e '/^[ 	]*$/d' -e 's/^[ 	]*//' -e 's/[ 	]*$//' \
+	    -e 's/[ 	][ 	]*/ /g' $1
+}
+
+# This function searches the data file for a queue type and displays its
+# parameters to stdout.  Exit status = 0 if match, 2 otherwise.
+# Usage: qtypeinfo file type ["all"]
+
+qtypeinfo() {
+	normalwhite "$1" |
+	awk '-F ' '
+	BEGIN { st=2 }
+	$1 == "type" && qtype == $2 && all != "all"		{ print $2,$3,$4,$5,$6; st=0 }
+	$1 == "type" && qtype == $2 && all == "all"		{ print $0; st=0 }
+	$1 == "type" && qtype == "" && all != "all"		{ print $2,$3,$4,$5,$6; st=0 }
+	$1 == "type" && qtype == "" && all == "all"		{ print $0; st=0 }
+	END { exit st }
+	' "qtype=$2" "all=$3"
+}
+
+# This function assesses the quality of the contents of a directory.
+# It retrieves the important state values (as defined in the $dirqdat
+# file) and displays the directory, maximum priority, maximum weight,
+# and an arbitrary state and value matching the displayed priority and
+# weight.
+# Usage:  quality dirq.dat dir status...
+
+quality() {
+	dirqdat="$1"
+	d="$2"
+	shift 2
+	if [ $# -gt 0 ]
+	then
+		statuslist="$*"
+	else
+		statuslist=
+	fi
+	(
+		# Get status values to initialize awk arrays
+		normalwhite "$dirqdat" |
+		grep '^status '
+
+		# Get relevant state values
+		$dirqst -d $nolock -f "$dirqdat" "$d" $statuslist |
+		sed -e 's/^/dirqst /' -e 's/=/ /'
+	) |
+	awk '
+	BEGIN	{
+				# Initialize
+				maxpriority = "none"
+				maxweight = 0
+				wt = 0
+				status = ""
+				value = ""
+				ok = 0
+			}
+	$1 == "status"	{
+						# Fill status arrays
+						idx = $3 "/" $4
+						priority[idx] = $5
+						weight[idx] = $6
+						if ( debug ) {
+							print stderr "status " $3 "=" $4 " priority " $5 " weight " $6
+						}
+					}
+	$1 == "dirqst"	{
+						ok = 1
+						stval[$2] = $3
+						if ( debug ) {
+							print stderr "dir " $2 "=" $3
+						}
+					}
+	END	{
+			if ( ok == 0 ) {
+				exit 2
+			}
+			split(statuslist,starray)
+			for ( i in starray) {
+				st = starray[i]
+				if ( debug ) {
+					print stderr "Checking state " st
+				}
+				idx = st "/" stval[st]
+				if ( maxpriority == "none" ) {
+					# First one
+					maxpriority = priority[idx]
+					status = st
+					value = stval[st]
+					wt = int(weight[idx])
+					maxweight = int(weight[idx])
+					if ( debug ) {
+						print stderr "first st=" st " val=" value " wt=" maxweight " maxpri=" maxpriority
+					}
+				} else if ( priority[idx] == maxpriority ) {
+					# Same priority, raise weight
+					if ( debug ) {
+						print stderr "before wt=" wt " maxweight=" maxweight " weight[" idx "]=" weight[idx]
+					}
+					if ( substr(weight[idx],0,1 ) == "+" ) {
+						wt += int(weight[idx])
+						if ( debug ) {
+							print stderr "incremening wt " wt
+						}
+					} else if ( substr(weight[idx],0,1 ) == "-" ) {
+						wt += int(weight[idx])
+						if ( debug ) {
+							print stderr "decrementing wt"
+						}
+					} else {
+					if ( debug ) {
+						print stderr "comparing wt " wt " to " maxweight
+					}
+						if ( wt > maxweight ) {
+							status = st
+							value = stval[st]
+							maxweight = wt
+							if ( debug ) {
+								print stderr "raise st=" st " val=" value " wt=" maxweight " maxpri=" maxpriority
+							}
+						}
+						wt = int(weight[idx])
+						if ( debug ) {
+							print stderr "setting wt"
+						}
+					}
+				} else if ( maxpriority == "removable" ) {
+					# Increase of priority
+					maxpriority = "persistent"
+					status = st
+					value = starray[st]
+					if ( substr(weight[idx],0,1 ) == "+" ) {
+						wt += int(weight[idx])
+					} else if ( substr(weight[idx],0,1 ) == "-" ) {
+						wt += int(weight[idx])
+					} else {
+						maxweight = wt
+						wt = int(weight[idx])
+					}
+					if ( debug ) {
+						print stderr "incpri st=" st " val=" value " wt=" maxweight " maxpri=" maxpriority
+					}
+				}
+			}
+			if ( wt > maxweight ) {
+				status = st
+				value = stval[st]
+				maxweight = wt
+				if ( debug ) {
+					print stderr "raise st=" st " val=" value " wt=" maxweight " maxpri=" maxpriority
+				}
+			}
+			if ( maxpriority == "none" ) {
+				# Indicate error from dirqst earlier in pipe
+				exit 2
+			} else {
+				# Write directory, maximum priority and weight
+				print dir " " maxpriority " " maxweight " " status \
+				      " " value
+				exit 0
+			}
+		}
+	' "dir=$d" "statuslist=$statuslist" "debug=$debug"
+}
+
+# Implement the -t option; list matching types (or all if none specified).
+# Exit 0 if output, 2 if otherwise.
+
+if [ $listtypes != 0 ]
+then
+	qtypeinfo "$dirqdat" $qtype
+	exit $?
+fi
+
+# Fetch queue info from info file
+info=`qtypeinfo "$dirqdat" "$qtype" all`
+st=$?
+if [ $st != 0 ]
+then
+	echo "${me}: There is no queue of type $qtype" 1>&2
+	exit $st
+fi
+
+# Split out parameters
+eval set $info
+seq="$3"
+parent="$4"
+if [ "x$prefix" = "x" ]
+then
+	prefix="$5"
+fi
+if [ "x$length" = "x" ]
+then
+	length="$6"
+fi
+shift 6
+statuslist="$*"
+
+expr "x$prefix" : 'x[A-Za-z][-A-Za-z0-9_]*$' > "$nulldev"
+if [ $? != 0 ]
+then
+	echo "${me}: Invalid prefix \"$prefix\" for queue $type" 1>&2
+	exit 2
+fi
+
+# Implement the -l option.
+
+if [ $list != 0 ]
+then
+	# Identify the directories in the queue
+	if [ "x$seq" = "xstamp" ]
+	then
+		pattern="${parent}${sep}${prefix}-*"
+	elif [ "x$seq" = "xserial" ]
+	then
+		pattern="${parent}${sep}${prefix}#*"
+	else
+		echo "${me}: Queue type $qtype has invalid sequence definition." 1>&2
+		exit 2
+	fi
+	matches=`echo $pattern`
+	if [ "x$matches" = "x$pattern" ]
+	then
+		echo "${me}: There is nothing in the $qtype queue" 1>&2
+		exit 2
+	fi
+
+	# Produce listings
+	if [ $liststate != 0 ]
+	then
+		# The -s option - display directory name and important states,
+		# followed by an empty line.  Remember the first non-zero exit
+		# status of dirqst and pass it back.
+		st2=0
+		for d in $matches
+		do
+			echo "$d"
+			$dirqst $default $nolock -f "$dirqdat" "$d" $statuslist
+			st=$?
+			echo
+			if [ $st2 != 0 ]
+			then
+				st2=$st
+			fi
+		done
+		exit $st2
+	elif [ $listweight != 0 ]
+	then
+		# The -w option - display maximum priority and maximum weight for each
+		# directory.  Error conditions from dirqst are communicated back via
+		# lack of output.
+		st2=0
+		for d in $matches
+		do
+			quality "$dirqdat" "$d" $statuslist
+			st=$?
+			if [ $st != 0 ]
+			then
+				echo "${me}: Cannot assess quality of $d" 1>&2
+			fi
+			if [ $st2 = 0 ]
+			then
+				st2=$st
+			fi
+		done
+		exit $st2
+	else
+		# Bare -l option, just list directories in the queue.
+		for d in $matches
+		do
+			echo "$d"
+		done
+		exit 0
+	fi
+fi
+
+
+# Fetch the special action values of the dirq state from the dirq.dat file.
+
+cmd=`normalwhite "$dirqdat" |
+	awk '$1 == "status" && $3 == "dirq" { print "state_" $2 "=" $4 }'`
+expr "x$cmd" : 'x[=_a-zA-Z0-9 
+]*$' > "$nulldev"
+if [ $? != 0 ]
+then
+	echo "${me}: There are invalid characters in the settings of the" 1>&2
+	echo "${me}: action status values specified in $dirqdat" 1>&2
+	exit 2
+fi
+eval "$cmd"
+
+st=0
+for x in create initialize interrupt preserve remove
+do
+	cmd="test x\$state_$x = x"
+	if eval $cmd
+	then
+		echo "${me}: No value for $x action in $dirqdat" 1>&2
+		st=2
+	fi
+done
+if [ $st != 0 ]
+then
+	exit $st
+fi
+
+# Set up temporary files
+
+tf="${tmp}${sep}${me}.$$"
+tf1="${tf}.1"
+tf2="${tf}.2"
+
+cleanup() {
+	rm -f "${tf}."*
+}
+
+trap cleanup 0
+
+# Initialize locking and dead state values
+
+dir=""
+lockdir=""
+statefile=""
+docleanup=0
+
+# This function cleans up locks and forces a removable condition in a
+# directory in a queue upon interruption.  Run it when a signal is received.
+# If $docleanup == 0 then do nothing, otherwise do the following.
+# If $statefile is set then clear out the file and record the dirq interrupt.
+# If $lockdir is set then remove the lock file.
+
+interrupt()
+{
+	if [ $docleanup != 0 ]
+	then
+		if [ "x$statefile" != "x" ]
+		then
+			echo "dirq=$state_interrupt" > "$statefile"
+		fi
+		if [ "x$lockdir" != "x" ]
+		then
+			rm -rf "$lockdir"
+		fi
+	fi
+}
+
+trap "cleanup; interrupt; exit 2" 1 2 3 5 13 15
+
+# Perform quality assessment of existing contents of the queue.
+
+# Identify the directories in the queue and the predecessor of the new
+# directory.
+if [ "x$seq" = "xstamp" ]
+then
+	pattern="${parent}${sep}${prefix}-*"
+	matches=`echo $pattern`
+	if [ "x$matches" = "x$pattern" ]
+	then
+		matches=
+	fi
+elif [ "x$seq" = "xserial" ]
+then
+	pattern="${parent}${sep}${prefix}#*"
+	matches=`/bin/ls -1d $pattern 2> /dev/null |
+	         sed -e 's/^\(.*\)#\([0-9][0-9]*\)$/\2 \1/' |
+	         sort -n |
+	         sed -e 's/^\([^ ]*\) \(.*\)$/\2#\1/'`
+else
+	echo "${me}: Queue type $qtype has invalid sequence definition." 1>&2
+	exit 2
+fi
+if [ "x$matches" != "x" ]
+then
+	set $matches
+	currlength=$#
+	predecessor=`eval echo "\\\$$#"`
+	if [ $debug != 0 ]
+	then
+		echo "${me}: Contents of queue:" 1>&2
+		for d in $matches
+		do
+			echo "${me}:    $d" 1>&2
+		done
+		echo "${me}: Predecessor: $predecessor" 1>&2
+		echo "${me}: Current length of queue: $currlength" 1>&2
+	fi
+else
+	# Queue is empty
+	matches=
+	currlength=0
+	predecessor=
+	if [ $debug != 0 ]
+	then
+		echo "${me}: The queue is empty" 1>&2
+	fi
+fi
+if [ $debug != 0 ]
+then
+	echo "${me}: max length of queue is $length" 1>&2
+fi
+
+# Perform quality assessment only if the queue is full, otherwise just
+# add a new directory.
+
+if [ $currlength -ge $length ]
+then
+
+	# Write the quality assessment to a temporary file.
+
+	> "$tf1"
+	if [ "x$matches" != "x" ]
+	then
+		for d in $matches
+		do
+			quality "$dirqdat" "$d" $statuslist >> "$tf1"
+		done
+	fi
+
+	# Order the directories in increasing quality
+
+	awk '
+	BEGIN { cnt = 1 }
+	$2 == "removable"	{ print 0,$3,cnt++,$1 }
+	$2 == "persistent"	{ print 1,$3,cnt++,$1 }
+	' "$tf1" |
+	sort -n -k1,3 > "$tf2"
+
+	if [ $debug != 0 ]
+	then
+		echo "${me}: Quality assessment of queue:" 1>&2
+		awk '{ print me ":",$0 }' "me=$me" "$tf2" 1>&2
+	fi
+
+	# Compute the number of directories to remove.
+	rmcnt=`echo "$currlength + 1 - $length" | bc`
+	if [ $debug != 0 ]
+	then
+		echo "${me}: Must remove $rmcnt directories" 1>&2
+	fi
+
+	# Compute the directories to be removed.
+	rmlist=`awk '
+	$4 == pred { next }	# Never remove predecessor
+	rmcnt > 0 && $1 == 0 { print $4; rmcnt-- }
+	END { if ( rmcnt > 0 ) { exit 2 } else { exit 0 } }
+	' "pred=$predecessor" "rmcnt=$rmcnt" "$tf2"`
+
+	if [ $? != 0 ]
+	then
+		echo "${me}: There are insufficient directories eligible for" 1>&2
+		echo "${me}: removal to keep the queue length at $length" 1>&2
+		exit 2
+	fi
+
+	if [ $debug != 0 ]
+	then
+		echo "${me}: The following directories will be removed:" 1>&2
+		for d in $rmlist
+		do
+			echo "${me}:   $d" 1>&2
+		done
+	fi
+
+else
+	if [ $debug != 0 ]
+	then
+		echo "${me}: Queue is short, no need to remove directories" 1>&2
+	fi
+fi
+
+# Compute the new directory's name
+
+if [ "x$seq" = "xstamp" ]
+then
+	stamp=`date '+%Y%m%d`
+	d="${prefix}-${stamp}"
+	prefpatt=`echo "$prefix" | sed -e 's/[.]/\\&1/g`
+	dpatt="${prefpatt}-${stamp}-"
+	if [ "x$predecessor" = "x" ]
+	then
+		if [ $debug != 0 ]
+		then
+			echo "${me}: Computing name of first directory in queue" 1>&2
+		fi
+		dir="${d}-0001"
+	else
+		predname=`basename "$predecessor"`
+		ser=`expr "x$predname" : "x${dpatt}\\([0-9]*\\)\$"`
+		if [ $? = 0 ]
+		then
+			if [ $debug != 0 ]
+			then
+				echo "${me}: Computing next directory created today" 1>&2
+			fi
+			ser=`expr $ser + 1`
+			ser=`expr "x0000$ser" : 'x.*\(....\)$'`
+			dir="${d}-${ser}"
+		else
+			if [ $debug != 0 ]
+			then
+				echo "${me}: Computing first directory created today" 1>&2
+			fi
+			dir="${d}-0001"
+		fi
+	fi
+else
+	if [ "x$predecessor" = "x" ]
+	then
+		if [ $debug != 0 ]
+		then
+			echo "${me}: Computing first directory in queue" 1>&2
+		fi
+		ser=1
+	else
+		if [ $debug != 0 ]
+		then
+			echo "${me}: Computing successor to $predecessor" 1>&2
+		fi
+		ser=`expr "x$predecessor" : 'x.*#\([1-9][0-9]*\)$'`
+		ser=`expr $ser + 1`
+	fi
+	dir="${prefix}#${ser}"
+fi
+dir="${parent}${sep}${dir}"
+
+if [ $debug != 0 ]
+then
+	echo "${me}: Name of new directory is ${dir}" 1>&2
+fi
+
+# Display the output required by the user.
+
+echo "$dir"
+if [ $listpred != 0 ]
+then
+	echo "$predecessor"
+fi
+if [ $listrm != 0 ]
+then
+	if [ "x$rmlist" != "x" ]
+	then
+		for d in $rmlist
+		do
+			echo "$d"
+		done
+	fi
+fi
+
+# Exit if no-op
+
+if [ $nop != 0 ]
+then
+	exit 0
+fi
+
+# Create the new directory, locking it if necessary and initialize its
+# state file.
+
+if [ $debug != 0 ]
+then
+	echo "${me}: Creating $dir" 1>&2
+fi
+
+# This is split into two parts to minimize race conditions.
+statefile="${dir}${sep}.dirq.state"
+if [ "x$nolock" = "x" ]
+then
+	lockdir="${dir}${sep}.dirq.lock"
+	docleanup=1
+	mkdir "$dir" "$lockdir" && echo "dirq=$state_create" > "$statefile"
+	st=$?
+else
+	docleanup=1
+	mkdir "$dir" && echo "dirq=$state_create" > "$statefile"
+	st=$?
+fi
+
+if [ $st != 0 ]
+then
+	echo "${me}: Could not create $dir" 1>&2
+	rm -rf "$dir"
+	exit 2
+fi
+
+# Initialize state in the new directory and unlock it.
+
+"$dirqst" -f "$dirqdat" -L "$dir" $initstate "dirq=$state_initialize"
+if [ "x$nolock" = "x" ]
+then
+	rmdir "$lockdir"
+fi
+docleanup=0
+
+if [ $debug != 0 ]
+then
+	echo "${me}: Created $dir" 1>&2
+fi
+
+# Remove prior directories as needed.  Record the "removing" state and
+# carefully remove the state last.
+
+for d in $rmlist
+do
+	if [ $debug != 0 ]
+	then
+		echo "${me}: Removing $d" 1>&2
+	fi
+
+	lockdir=
+	statefile="${d}${sep}.dirq.state"
+	docleanup=1
+	"$dirqst" -f "$dirqdat" $nolock "$d" "dirq=$state_remove"
+
+	# Remove contents of $dir, leaving locks and state files until the
+	# very last.
+	for x in ${d}${sep}.* ${d}${sep}*
+	do
+		if [ "$x" = "${d}${sep}." ]
+		then
+			continue
+		elif [ "$x" = "${d}${sep}.." ]
+		then
+			continue
+		elif [ "$x" = "${d}${sep}.dirq.state" ]
+		then
+			continue
+		elif [ "$x" = "${d}${sep}.dirq.lock" ]
+		then
+			continue
+		else
+			rm -rf "$x"
+		fi
+	done
+	rm -rf "$d"
+
+	if [ $debug != 0 ]
+	then
+		echo "${me}: Removed $d" 1>&2
+	fi
+done

@@ -1,0 +1,560 @@
+.TH dirq.dat 5
+.SH NAME
+.LP
+dirq.dat \- Data file that drives the operation of the dirq and dirqst
+programs.
+.SH SYNOPSIS
+.LP
+.B type
+.I type-name
+{\fBstamp\fR|\fBserial\fR}
+.I parent
+.I prefix
+.I length
+.I state-name...
+.LP
+.B type
+is a keyword.
+.br
+.I type-name
+identifies the directory queue type.
+.br
+.B stamp
+specifies datestamp name format, or
+.B serial
+specifies serial name format.
+.br
+.I parent
+identifies the parent directory of all directories in a queue of this type.
+.br
+.I prefix
+specifies the default common prefix shared by all directories in a queue of
+this type (but this can be overridden for specific queues, allowing multiple
+queues of the same type).
+.br
+.I length
+specifies the default maximum length of the queue (minimum 2, and can be
+overridden for specific queues, allowing different queues of the same type
+to have different lengths).
+.br
+.I state-name
+is a list of states that contribute a directory's quality assessment.
+(This list must always include the
+.B dirq
+state name.)
+.LP
+.B status
+.I action
+.I state
+.I value
+.I priority
+.I weight
+.LP
+.B status
+is a keyword.
+.br
+.I action
+specifies an action that changes the state of a directory.
+Valid actions are
+.BR create ,
+.BR default ,
+.BR initialize ,
+.BR interrupt ,
+.BR none ,
+.BR preserve ,
+and
+.BR remove .
+.br
+.I state
+specifies the name of a state value.
+.br
+.I value
+specifies a value that a state may have.
+.br
+.I priority
+specifies if a directory having a state set to this value is
+.B removable
+or
+.BR persistant .
+.br
+.I weight
+indicates the level of quality of a removable directory in this state.
+(This can be an integer, possibly preceded by a plus [+] or minus [-]
+symbol.
+This sets, increments, or decrements the weight of a directory, respectively.
+Higher weights mean higher quality.)
+
+.SH DESCRIPTION
+
+.LP
+A directory queue is a collection of directories that share a common
+parent directory.
+Each directory in the queue has its own state, and is named with a prefix,
+an optional datestamp, and a serial number.
+The prefix is shared by all directories in a queue.
+The parent directory and prefix uniquely identify a queue, which is also
+given a symbolic name or
+.BR type-name .
+(Multiple directory queues may share the same parent directory.)
+
+.LP
+Directory queues have a configurable default maximum length;
+when full, directories are removed from the queue to make room for new ones.
+The length can be set as a parameter given to the
+.B dirq(1)
+program.
+Directories are removed based on the results of a quality assessment.
+The assessment is done by comparing applicable state values stored in each
+directory.
+When necessary, the directory of lowest quality is removed from the queue,
+with the following exceptions:
+Directories marked as
+.B persistent
+are never removed;
+The newest directory is never removed, and a directory of the next higher
+level of quality is removed instead.
+In the event that multiple directories share the lowest quality assessment,
+the oldest is removed.
+
+.LP
+The
+.B dirq.dat
+file drives the operation of the
+.B dirq
+and
+.B dirqst
+programs by specifying the types and locations of directory queues,
+defining their states, and how the states affect their management.
+The location of the
+.B dirq.dat
+file is in the same directory as the
+.B dirq
+and
+.B dirqst
+programs, or in a directory named
+"\fBlib\fR"
+that is a sibling of the directory containing those programs.
+
+.LP
+The
+.B dirq.dat
+file has two sections:
+The
+.B type
+section and the
+.B status
+section.
+These sections are identified by keywords in the first field of each line.
+
+.LP
+Fields in the
+.B dirq.dat
+file are separated by white space (blanks or tabs).
+Lines in the file beginning with the pound sign (#) in column one,
+empty lines,
+and lines containing only white space are ignored.
+
+.LP
+The
+.B type
+section specifies the various directory queues that are managed by the
+.B dirq
+program.
+Lines in this section all begin with the
+.B type
+keyword.
+The second field,
+.BR type-name ,
+identifies the names of directory queues.
+The third field specifies the naming convention, which may be
+.B stamp
+(\fIprefix\fR-\fIdatestamp\fR-\fIserial\fR)
+or
+.B serial
+(\fIprefix\fR#\fIserial\fR)
+naming format.
+The fourth field is the fullpath to the directory that contains all of the
+directories in the queue (their parent directory) as a fullpath.
+The fifth field is the default prefix used when naming a directory in the
+queue.
+(Directories are named by appending a datestamp and serial number to
+the prefix.)
+The sixth field is the default length of the queue, which must be 2 or greater.
+The remaining fields identify the states that participate in the quality
+assessment.
+When assessing quality, the status values are examined in the order
+specified.
+The
+.B dirq
+state must always be included in this list (usually first) so that the
+.B dirq
+and
+.B dirqst
+programs operate correctly.
+
+.LP
+The
+.B status
+section specifies how various states are interpreted while performing
+a quality assessment.
+Lines in this section begin with the
+.B status
+keyword.
+The second field is an action taken by the
+.B dirq
+program that causes a the given state to be set to the given value.
+(Valid actions are
+.BR create ,
+.BR default ,
+.BR initialize ,
+.BR interrupt ,
+.BR none ,
+and
+.BR remove .
+What these mean are described below.)
+The third field is the name of the state.
+The fourth field is the value of the state.
+The fifth field is the priority of the state, which can be either
+.B persistent
+(the directory cannot be removed from the queue),
+or
+.BR removable
+(the directory is subject to removal from the queue).
+The remaining field specifies a weight that refects the relative quality of
+.B removable
+directories; higher weight means higher quality.
+The value of the field is an integer, possibly preceded by a plus (+) sign or
+a minus (-) sign.
+If the integer is preceded by a plus sign, the weight is incremented by the
+given value.
+If the integer is preceded by a minus sign, the weight is decremented by the
+given value.
+If the integer is not preceded by either a plus or minus sign, then the
+weight is set to the given value.
+(Values that are
+.B persistent
+must also have weights listed in the
+.B dirq.dat
+file, but the weights are ignored.
+By convention, they are set to 1000 to remind the reader that directories
+having that state set to that value will not be removed.)
+
+.LP
+Actions taken by the
+.B dirq
+program are as follows.
+Only the
+.B default
+and
+.B none
+actions may apply to user-supplied states.
+The remaining actions must apply to the
+.B dirq
+state.
+
+.RS .5i
+.LP
+.B create
+sets a directory's state to the given value after the directory is
+created but before it is initialized.
+This is a persistent state to prevent multiple concurrent instances of the
+.B dirq
+program from interfering with each other.
+.LP
+.B default
+specifies the value returned by the
+.B dirqst
+program if the state is unset.
+This is usually a removable state.
+.LP
+.B initialize
+sets the given state to the given value immediately after the directory is
+created and initialized.
+This is a removable state, indicating that the directory is undergoing
+the usual management.
+.LP
+.B interrupt
+sets the given state to the given value whenever the
+.B dirq
+program is interrupted.
+This is a removable state with very low quality so that directories in this
+state (which are usually incomplete) are cleaned before those that undergo
+the usual management.
+.LP
+.B none
+indicates that no action sets the given state to this value, but it can
+be set explicitly by invoking the
+.B dirqst
+program; this is required if the state is used for the quality assessment.
+These are usually user-specified values, and may be either persistent or
+removable.
+.LP
+.B preserve
+is reserved for the
+.B dirq
+state to indicate that a directory was preserved at the request of a user.
+This is done by using the
+.B dirqst
+program to set the
+.B dirq
+state.
+.LP
+.B remove
+sets a directory's state to the given value while the directory is being
+removed by the
+.B dirq
+program.
+This is a persistent state to prevent multiple concurrent instances of the
+.B dirq
+program from interfering with one another.
+.RE
+
+.LP
+The following table shows the values of the
+.B dirq
+state.
+The
+.B dirq.dat
+file must include this configuration for the
+.B dirq
+program to operate correctly.
+
+.LP
+.TS
+c c c c c c
+l l l l l n.
+\fB#keyword	action	state	value	priority	weight\fR
+status	default	dirq	uninitialized	removable	0
+status	interrupt	dirq	interrupted	removable	0
+status	initialize	dirq	initialized	removable	10
+status	create	dirq	created	persistent	1000
+status	remove	dirq	removing	persistent	1000
+status	preserve	dirq	preserved	persistent	1000
+.TE
+
+.LP
+Paths and prefixes must contain no white space but otherwise can be any
+string that is valid to the filesystem and does not contain shell
+metacharacters.
+
+.LP
+State names and values must begin with a letter and may contain alphanumerics,
+the hyphen (-), or the underscore (_).
+
+.LP
+To assess the quality of a directory, the states listed in the directory
+queue's
+.B type
+record are examined in the order listed.
+If one of these states is set to a
+.B persistent
+state in a directory, then that directory is assumed to be of very
+high quality and is omitted from further consideration.
+The highest weight indicated by the
+.B removable
+states indicates the directory's quality.
+The weight may be set directly according to a status value, or it may be
+computed by adding and subtracting increments as specified in the
+.B status
+records.
+When selecting directories for removal, the
+.B dirq
+program chooses those with the lowest maximum weights.
+
+.SH NOTES
+
+.P
+In directories contained by queues using the
+.B stamp
+naming format, the creation order and the sort order of the directory
+names are the same.
+This is NOT the case with directories using the
+.B serial
+naming format.
+
+.SH EXAMPLES
+
+.LP
+As shipped, the
+.B dirq.dat
+file defines three sample directory queues.
+The first is a queue of simple temporary directories that are deleted
+chronologically.
+The second is a queue of directories that have a single measure of
+quality.
+The third is a queue of directories that have two measures of quality.
+All of these examples require the
+.B dirq
+state definition as shown in the table in the section above.
+
+.LP
+The first sample queue contains simple temporary directories.
+The queue type is called "temporary" and all of its directories
+(a maximum of 4, prefixed by "dirqtmp")
+are contained in the parent directory named "/tmp".
+Directories in this queue are named with the datestamp convention,
+\fBdirqtmp-\fIdatestamp\fB-\fIserial\fR.
+There is no quality assessment other than the minimum required for
+proper operation of the
+.B dirq
+program.
+This directory queue is defined in the
+.B dirq.dat
+file as shown in the following table:
+
+.TS
+c c c c c c l
+l l l l l n l.
+\fB#keyword	type	sequence	parent	prefix	length	states\fR
+type	temporary	stamp	/tmp	dirqtmp	4	dirq
+.TE
+
+.LP
+The second sample queue incorporates a single measure of quality.
+The quality is measured by a succeed/fail status that indicates whether
+or not some process has completed correctly.
+In addition, in-progress, interrupted, and uninitialized conditions are
+supported.
+Directories having the uninitialized and interrupted conditions have the
+lowest quality, on the assumption that the event that sets more reasonable
+conditions never completed.
+The in-progress condition indicates that the event that determines the
+quality has begun but has not yet completed, and it is persistent so
+that the directory will not be deleted until the event completes.
+Finally, the succeed and fail conditions indicate the final quality of
+the directory, with the succeed condition having higher quality than the
+fail condition.
+
+.LP
+The state that measures the quality of each directory in this second
+example is called "release".
+The following table gives its specification.
+
+.LP
+.TS
+c c c c c c
+l l l l l n.
+\fB#keyword	action	state	value	priority	weight\fR
+status	default	release	uninitialized	removable	0
+status	none	release	interrupted	removable	0
+status	none	release	fail	removable	400
+status	none	release	succeed	removable	600
+status	none	release	inprogress	persistent	1000
+.TE
+
+.LP
+Given the new "release" state, the followiing table shows the
+definition of the queue described in this second example.
+The name of the queue and its prefix are also called "release".
+The parent directory is "/tmp", and the maximum length of the
+queue is 4.
+The directories in this queue are named with the prefix and serial
+number,
+\fBrelease#\fIserial\fR.
+Finally, the "dirq" and "release" states are used to measure the
+the quality of each directory in the queue, and are evaluated in that order.
+The following table shows how this queue is defined.
+
+.LP
+.TS
+c c c c c c l
+l l l l l n l.
+\fB#keyword	type	sequence	parent	prefix	length	states\fR
+type	release	serial	/tmp	release	4	dirq release
+.TE
+
+.LP
+This definition of the queue specifies that successful releases are
+of higher quality than failed ones, and that failed relases are of higher
+quality than incomplete ones.
+Of the incomplete releases, the ones where the directory was created and
+initialized properly by the
+.B dirq
+program have higher quality than those that were not.
+
+.LP
+The third sample queue incorporates two measures of quality.
+The first measure is a succeed/fail status, and the second is a
+pass/fail/none status.
+Both states also support uninitialized, interrupted and in-progress
+conditions.
+The in-progress conditions indicate that one of the events that determine the
+quality has begun but has not yet completed, and they are persistent so
+that the directory will not be deleted until the event completes.
+The following table specifies the status values.
+
+.LP
+.TS
+c c c c c c
+l l l l l n.
+\fB#keyword	action	state	value	priority	weight\fR
+status	default	build	uninitialized	removable	0
+status	none	build	interrupted	removable	0
+status	none	build	fail	removable	100
+status	none	build	succeed	removable	180
+status	none	build	inprogress	persistent	1000
+
+status	default	test	uninitialized	removable	+0
+status	none	test	interrupted	removable	+0
+status	none	test	fail	removable	+30
+status	none	test	none	removable	+70
+status	none	test	pass	removable	+220
+status	none	test	inprogress	persistent	1000
+.TE
+
+.LP
+The directory queue is then specified with the following definition:
+
+.LP
+.TS
+c c c c c c l
+l l l l l n l.
+\fB#keyword	type	sequence	parent	prefix	length	states\fR
+type	build	stamp	/tmp	build	4	dirq build test
+.TE
+
+.LP
+The table below illustrates the cumulative weights of the various
+state settings.
+Here,
+.B N/A
+means either the
+.B uninitialized
+or
+.B interrupted
+states.
+
+.LP
+.TS
+l l
+c c c c
+l n n n.
+\fBtest	build\fR
+\fB--	succeed	fail	N/A\fR
+\fBpass\fR	400	320	220
+\fBnone\fR	250	170	70
+\fBfail\fR	210	130	30
+\fBN/A\fR	180	100	0
+.TE
+
+.LP
+These specifications make use of the accumulative feature of directory
+weights to provide a couple of ways to reach a desired weight.
+In this case, a weight of 215 or higher indicates that the contents of
+the directory are "good," which means that the directory contents either
+passed a test or built successfully in the absence of a test.
+Weights below 215 indicate that the contents of the directory are "bad."
+
+.LP
+Also note that in the case of indeterminate build and test status, the
+.B dirq
+state's value sets the quality of the directory.
+
+
+.SH SEE ALSO
+
+.LP
+dirq(1)
+.br
+dirqst(1)
+
