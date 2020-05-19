@@ -377,12 +377,14 @@ naming format.
 .LP
 As shipped, the
 .B dirq.dat
-file defines three sample directory queues.
+file defines four sample directory queues.
 The first is a queue of simple temporary directories that are deleted
 chronologically.
 The second is a queue of directories that have a single measure of
 quality.
 The third is a queue of directories that have two measures of quality.
+The fourth demonstrates a promotion system that is typical of a
+continuous delivery pipeline.
 All of these examples require the
 .B dirq
 state definition as shown in the table in the section above.
@@ -549,6 +551,84 @@ Weights below 215 indicate that the contents of the directory are "bad."
 Also note that in the case of indeterminate build and test status, the
 .B dirq
 state's value sets the quality of the directory.
+
+.LP
+The fourth example illustrates a promotion system to identify how far
+along a continuous delivery pipeline each directory in a queue has
+proceded, as indicated by the "pipeline" state.
+The pipeline has promotion levels for software build, unit test suite,
+functional test suite, integration test suite, performance test
+suite, and release status.
+The build and each test level have in-progress, pass, and fail values
+associated with them.
+The in-progress values are persistent, and the pass values indicate higher
+quality than their fail counterparts.
+The release level has values to represent candidacy, abandonment, release,
+and end-of-life.
+The release value is persistent, and the others are removable.
+The relative quality in increasing order are:  rel-abandoned, rel-eol,
+rel-candidate, and released.
+
+.LP
+The following table shows the definition of the pipeline states.
+
+.LP
+.TS
+c c c c c c
+l l l l l n.
+\fB#keyword	action	state	value	priority	weight\fR
+status	default	pipeline	uninitialized	removable	0
+status	none	pipeline	build-fail	removable	100
+status	none	pipeline	unit-fail	removable	105
+status	none	pipeline	int-fail	removable	110
+status	none	pipeline	func-fail	removable	115
+status	none	pipeline	perf-fail	removable	120
+status	none	pipeline	rel-abandoned	removable	125
+status	none	pipeline	rel-eol	removable	130
+status	none	pipeline	build-pass	removable	300
+status	none	pipeline	unit-pass	removable	305
+status	none	pipeline	int-pass	removable	310
+status	none	pipeline	func-pass	removable	315
+status	none	pipeline	perf-pass	removable	320
+status	none	pipeline	rel-candidate	removable	325
+status	none	pipeline	build-inprog	persistent	1000
+status	none	pipeline	unit-inprog	persistent	1005
+status	none	pipeline	int-inprog	persistent	1010
+status	none	pipeline	func-inprog	persistent	1020
+status	none	pipeline	perf-inprog	persistent	1025
+status	none	pipeline	released	persistent	1030
+.TE
+
+.LP
+Note that the "pipeline" state indicates only how far along the pipeline
+a directory has proceded.
+It does not record the actual results or scores that caused each directory to
+advance along the pipeline.
+Additional state values would be used for that purpose, and they can be
+reported on by editing the output of the
+.B dirqst
+program to produce reports.
+
+.LP
+The followiing table shows the definition of the pipeline queue described
+in this fourth example.
+The name of the queue and its prefix are both called "pipeline".
+The parent directory is "/tmp", and the maximum length of the
+queue is 8.
+The directories in this queue are named with the prefix and serial
+number,
+\fBpipeline#\fIserial\fR.
+Finally, the "dirq" and "pipeline" states are used to measure the
+the quality of each directory in the queue, and are evaluated in that order.
+The following table shows how this queue is defined.
+
+.LP
+.TS
+c c c c c c l
+l l l l l n l.
+\fB#keyword	type	sequence	parent	prefix	length	states\fR
+type	pipeline	serial	/tmp	pipeline	8	dirq pipeline
+.TE
 
 
 .SH SEE ALSO

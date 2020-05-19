@@ -25,7 +25,7 @@ dirq \- Create and delete directories in a directory queue.
 .B -l
 [\fB-L\fR]
 [\fB-P \fIprefix\fR]
-[\fB-s\fR[\fB-d\fR] | \fB-w\fR]
+[\fB-s\fR | \fB-w\fR]
 .I type-name
 
 .LP
@@ -80,7 +80,7 @@ which contains the specifications of each directory queue and the
 important state values.
 That file is located either in the directory containing the
 .B dirq
-program, or in a program named "lib" that is a sibling of the directory
+program, or in a directory named "lib" that is a sibling of the directory
 containing the
 .B dirq
 program, or it is identified on the command line.
@@ -141,9 +141,6 @@ The
 .B -s
 option lists the status values that are involved in the quality assessment.
 The
-.B -d
-option displays default status values if some states are not set.
-The
 .B -w
 option displays the quality and persistence of each directory, and the
 state that produced that level of quality and persistence.
@@ -181,11 +178,6 @@ The exit code is normally zero; it is non-zero in the event of an error
 or if a query for a specific queue type fails.
 
 .SH OPTIONS
-
-.IP \fB-d\fR .5i
-In conjunction with the
-.B -s
-argument, displays default values of unset states.
 
 .IP \fB-f\fIfile .5i
 Specifies the

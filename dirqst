@@ -8,6 +8,8 @@
 
 # Identify platform, set platform-specific features.
 
+export LANG=C
+
 platform=`uname`
 if [ $? != 0 -o "x$platform" = "xWindows_NT" ]
 then
@@ -86,8 +88,7 @@ fi
 usage() {
 cat << EOF
 ${me}:  Usage:
-${me}:  ${me} [-d] [-f file] [-L] [-n] directory [state[=[value]]]...
-${me}:  -d = Displays default value of state if never set
+${me}:  ${me} [-f file] [-L] [-n] directory [state[=[value]]]...
 ${me}:  -f file = specifies dirq data file (default $dirqdat)
 ${me}:  -L = defeats locking (not recommended)
 ${me}:  -n = no-op; checks assignments without modifying directory state
@@ -106,15 +107,11 @@ DUALCASE=1
 
 bad=0
 debug=0
-default=0
 nolock=0
 nop=0
-while getopts "df:hLnX" c
+while getopts "f:hLnX" c
 do
 	case "$c" in
-	d)
-		default=1
-		;;
 	f)
 		dirqdat="$OPTARG"
 		;;
@@ -132,9 +129,8 @@ do
 		debug=1
 		;;
 	esac
-	shift `expr $OPTIND - 1`
-	OPTIND=1
 done
+shift `expr $OPTIND - 1`
 
 # Check that the $dirqdat file exists and is readable.
 
@@ -387,45 +383,14 @@ then
 	if [ $nop = 0 ]
 	then
 		sed -f "$tf2" "$statefile" >> "$tf4"
-		sort "-t=" -k 0,1 "$tf4" > "$tf1"
+		sort "-t=" -k 1,2 "$tf4" > "$tf1"
 	fi
 fi
 
 # Display contents of state file before edits.  This allows for a kind
 # of "test and swap" capability, which might come in handy someday.
-# If requested, join the state values with defaults from $dirqdat
-# and display.  Some gymnastics are done with the join to make sure
-# that uninitialized conditions never collide with valid initialized
-# conditions:  Field separators are converted to tabs before the sort,
-# and converted back after the cut filter.
 
-if [ $default != 0 ]
-then
-
-	# Fetch default state values.
-
-	sed -e 's/[ 	][ 	]*/	/g' "$dirqdat" |
-	awk '
-	BEGIN {
-		FS="	"
-		OFS="	"
-	}
-	$1 == "status" && $2 == "default" { print $3,$4 }
-	' |
-	sort "-t	" -k 0,1 > "$tf4"
-
-	# Convert state file leading "=" to tab, sort, join, filter, and restore
-	# to original format.
-
-	sed -e 's/=/	/' "$statefile" |
-	sort "-t	" -k 0,1 |
-	join -a1 -a2 '-t	' -11 -21 -o 1.1 1.2 2.1 2.2 - "$tf4" |
-	cut '-d	' -f1,2 |
-	sed -e 's/	/=/'
-else
-	cat "$statefile"
-fi |
-sed -f "$tf3"
+sed -f "$tf3" "$statefile"
 
 # Replace the state file with the edited copy.
 
