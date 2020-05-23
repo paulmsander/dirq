@@ -1018,23 +1018,40 @@ fi
 # Initialize the new directory's state.
 
 docleanup=1
-mkdir -p "$mkd" &&
-(
-	echo "dirq=$state_create"
-	defvalues "$dirqdat" "$qtype" | grep -v '^dirq='
-) > "$statefile"
+mkdir -p "$mkd"
 st=$?
-
 if [ $st != 0 ]
 then
-	echo "${me}: Could not create $dir" 1>&2
+	echo "${me}: Could not create $dir ($st)" 1>&2
 	rm -rf "$dir"
 	exit 2
 fi
 
+(
+	echo "dirq=$state_create"
+	defvalues "$dirqdat" "$qtype" | grep -v '^dirq='; true
+) > "$statefile"
+st=$?	# Catch error due to redirection.
+if [ $st != 0 ]
+then
+	echo "${me}: Could not initialize state of $dir ($st)" 1>&2
+	rm -rf "$dir"
+	exit 2
+fi
+
+
 # Initialize state in the new directory and unlock it.
 
 "$dirqst" -f "$dirqdat" -L "$dir" $initstate "dirq=$state_initialize"
+st=$?
+if [ $st != 0 ]
+then
+	echo "${me}: Failed to set dirq state to $state_initialize"
+	echo "${me}: Failed to set specified state values in $dir ($st)" 1>&2
+	rm -rf "$dir"
+	exit 2
+fi
+
 if [ "x$nolock" = "x" ]
 then
 	rmdir "$lockdir"

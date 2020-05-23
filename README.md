@@ -1,6 +1,6 @@
 # dirq
 
-Dirq 1.2
+Dirq 2.0.0
 
 The dirq package provides some simple tools that help to automate storage
 management when a process is repeated many times.  It implements queues
@@ -49,7 +49,19 @@ This software is donated to the public domain by its author, Paul Sander
 
 History:
 
-1.0-beta -- Initial implementation.
+2.0 -- Remove the -d option from the dirq and dirqst programs.  Add
+       a sample pipeline queue type to the dirq.dat file, and document it.
+       When creating a new directory, initialize all of the state values
+       that contribute to the quality assessment.
+
+1.2 -- Added the -N length option to the dirq program to allow the user to
+       override the queue length specified in the dirq.dat file.  Also fixed
+       a bug that allowed the predecessor directory to be removed, and
+       corrected the documentation.
+
+1.1 -- Added the -P option, which overrides the prefix for the given queue
+       type.  This allows multiple queues of the same type to share a parent
+       directory.
 
 1.0 -- Changed the format of the dirq.dat file to specify whether directories
        in a queue are named with serial number only or also with a datestamp.
@@ -57,11 +69,4 @@ History:
        datestamp format, sort order of the names is the same as the creation
        order.
 
-1.1 -- Added the -P option, which overrides the prefix for the given queue
-       type.  This allows multiple queues of the same type to share a parent
-       directory.
-
-1.2 -- Added the -N length option to the dirq program to allow the user to
-       override the queue length specified in the dirq.dat file.  Also fixed
-       a bug that allowed the predecessor directory to be removed, and
-       corrected the documentation.
+1.0-beta -- Initial implementation.
