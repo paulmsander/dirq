@@ -38,11 +38,9 @@ contribute to quality assessments, and their weights.
 Man pages are provided that describe in detail how the tools operate and
 how to configure them.
 
-To install the dirq package, unpack the gzipped tar file and copy the
-dirq and dirqst programs to a location in the user's PATH.  Copy the
-dirq.dat file either to that same directory or to a directory named "lib"
-that is a sibling of it.  Copy the man pages to a place in the user's
-MANPATH.  Then edit the dirq.dat file as needed.
+To install the dirq package, run "make -n install" and review the output.
+Then become root and run "make install".  Finally, edit the installed
+dirq.dat file as needed.
 
 This software is donated to the public domain by its author, Paul Sander
 (paul@wakawaka.com).
