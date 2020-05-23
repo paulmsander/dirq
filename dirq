@@ -450,125 +450,160 @@ quality() {
 		grep '^status '
 
 		# Get relevant state values
-		$dirqst -d $nolock -f "$dirqdat" "$d" $statuslist |
+		$dirqst $nolock -f "$dirqdat" "$d" $statuslist |
 		sed -e 's/^/dirqst /' -e 's/=/ /'
 	) |
 	awk '
-	BEGIN	{
-				# Initialize
-				maxpriority = "none"
-				maxweight = 0
-				wt = 0
-				status = ""
-				value = ""
-				ok = 0
+	BEGIN {
+		# Initialize
+		maxpriority = "none"
+		maxweight = 0
+		wt = 0
+		status = ""
+		value = ""
+		ok = 0
+	}
+	$1 == "status" {
+		# Fill status arrays
+		idx = $3 "/" $4
+		priority[idx] = $5
+		weight[idx] = $6
+		if ( debug ) {
+			print stderr "status " $3 "=" $4 " priority " $5 " weight " $6
+		}
+	}
+	$1 == "dirqst" {
+		ok = 1
+		stval[$2] = $3
+		if ( debug ) {
+			print stderr "dir " $2 "=" $3
+		}
+	}
+	END {
+		if ( ok == 0 ) {
+			exit 2
+		}
+		split(statuslist,starray)
+		for ( i in starray) {
+			st = starray[i]
+			if ( debug ) {
+				print stderr "Checking state " st
 			}
-	$1 == "status"	{
-						# Fill status arrays
-						idx = $3 "/" $4
-						priority[idx] = $5
-						weight[idx] = $6
-						if ( debug ) {
-							print stderr "status " $3 "=" $4 " priority " $5 " weight " $6
-						}
-					}
-	$1 == "dirqst"	{
-						ok = 1
-						stval[$2] = $3
-						if ( debug ) {
-							print stderr "dir " $2 "=" $3
-						}
-					}
-	END	{
-			if ( ok == 0 ) {
-				exit 2
-			}
-			split(statuslist,starray)
-			for ( i in starray) {
-				st = starray[i]
-				if ( debug ) {
-					print stderr "Checking state " st
-				}
-				idx = st "/" stval[st]
-				if ( maxpriority == "none" ) {
-					# First one
-					maxpriority = priority[idx]
-					status = st
-					value = stval[st]
-					wt = int(weight[idx])
-					maxweight = int(weight[idx])
-					if ( debug ) {
-						print stderr "first st=" st " val=" value " wt=" maxweight " maxpri=" maxpriority
-					}
-				} else if ( priority[idx] == maxpriority ) {
-					# Same priority, raise weight
-					if ( debug ) {
-						print stderr "before wt=" wt " maxweight=" maxweight " weight[" idx "]=" weight[idx]
-					}
-					if ( substr(weight[idx],0,1 ) == "+" ) {
-						wt += int(weight[idx])
-						if ( debug ) {
-							print stderr "incremening wt " wt
-						}
-					} else if ( substr(weight[idx],0,1 ) == "-" ) {
-						wt += int(weight[idx])
-						if ( debug ) {
-							print stderr "decrementing wt"
-						}
-					} else {
-					if ( debug ) {
-						print stderr "comparing wt " wt " to " maxweight
-					}
-						if ( wt > maxweight ) {
-							status = st
-							value = stval[st]
-							maxweight = wt
-							if ( debug ) {
-								print stderr "raise st=" st " val=" value " wt=" maxweight " maxpri=" maxpriority
-							}
-						}
-						wt = int(weight[idx])
-						if ( debug ) {
-							print stderr "setting wt"
-						}
-					}
-				} else if ( maxpriority == "removable" ) {
-					# Increase of priority
-					maxpriority = "persistent"
-					status = st
-					value = starray[st]
-					if ( substr(weight[idx],0,1 ) == "+" ) {
-						wt += int(weight[idx])
-					} else if ( substr(weight[idx],0,1 ) == "-" ) {
-						wt += int(weight[idx])
-					} else {
-						maxweight = wt
-						wt = int(weight[idx])
-					}
-					if ( debug ) {
-						print stderr "incpri st=" st " val=" value " wt=" maxweight " maxpri=" maxpriority
-					}
-				}
-			}
-			if ( wt > maxweight ) {
+			idx = st "/" stval[st]
+			if ( maxpriority == "none" ) {
+				# First one
+				maxpriority = priority[idx]
 				status = st
 				value = stval[st]
-				maxweight = wt
+				wt = int(weight[idx])
+				maxweight = int(weight[idx])
 				if ( debug ) {
-					print stderr "raise st=" st " val=" value " wt=" maxweight " maxpri=" maxpriority
+					print stderr "first st=" st " val=" value " wt=" maxweight " maxpri=" maxpriority
+				}
+			} else if ( priority[idx] == maxpriority ) {
+				# Same priority, raise weight
+				if ( debug ) {
+					print stderr "before wt=" wt " maxweight=" maxweight " weight[" idx "]=" weight[idx]
+				}
+				if ( substr(weight[idx],0,1 ) == "+" ) {
+					wt += int(weight[idx])
+					if ( debug ) {
+						print stderr "incremening wt " wt
+					}
+				} else if ( substr(weight[idx],0,1 ) == "-" ) {
+					wt += int(weight[idx])
+					if ( debug ) {
+						print stderr "decrementing wt"
+					}
+				} else {
+				if ( debug ) {
+					print stderr "comparing wt " wt " to " maxweight
+				}
+					if ( wt > maxweight ) {
+						status = st
+						value = stval[st]
+						maxweight = wt
+						if ( debug ) {
+							print stderr "raise st=" st " val=" value " wt=" maxweight " maxpri=" maxpriority
+						}
+					}
+					wt = int(weight[idx])
+					if ( debug ) {
+						print stderr "setting wt"
+					}
+				}
+			} else if ( maxpriority == "removable" ) {
+				# Increase of priority
+				maxpriority = "persistent"
+				status = st
+				value = starray[st]
+				if ( substr(weight[idx],0,1 ) == "+" ) {
+					wt += int(weight[idx])
+				} else if ( substr(weight[idx],0,1 ) == "-" ) {
+					wt += int(weight[idx])
+				} else {
+					maxweight = wt
+					wt = int(weight[idx])
+				}
+				if ( debug ) {
+					print stderr "incpri st=" st " val=" value " wt=" maxweight " maxpri=" maxpriority
 				}
 			}
-			if ( maxpriority == "none" ) {
-				# Indicate error from dirqst earlier in pipe
-				exit 2
-			} else {
-				# Write directory, maximum priority and weight
-				print dir " " maxpriority " " maxweight " " status \
-				      " " value
-				exit 0
+		}
+		if ( wt > maxweight ) {
+			status = st
+			value = stval[st]
+			maxweight = wt
+			if ( debug ) {
+				print stderr "raise st=" st " val=" value " wt=" maxweight " maxpri=" maxpriority
 			}
 		}
+		if ( maxpriority == "none" ) {
+			# Indicate error from dirqst earlier in pipe
+			exit 2
+		} else {
+			# Write directory, maximum priority and weight
+			print dir " " maxpriority " " maxweight " " status \
+			      " " value
+			exit 0
+		}
+	}
 	' "dir=$d" "statuslist=$statuslist" "debug=$debug"
+}
+
+# This function returns the names of the directory states that figure
+# in to the quality evaluation, given the name of a dirq.dat file and
+# a queue type name.
+# Usage:  qualnames dirq.dat type-name
+
+qualnames() {
+	normalwhite "$1" |
+	awk '
+	$1 == "type" && $2 == type { print $0 }
+	{ next }
+	' type="$2" |
+	cut '-d ' -f7-
+}
+
+# This function returns the default values of all states that figure
+# in to the quality evaluation, given the name of a dirq.dat file and
+# a queue type name.
+
+defvalues() {
+	states=`qualnames "$1" "$2"`
+	normalwhite "$1" |
+	awk '
+	NR == 1 {
+		l = split(states, stx, " ");
+		for (i = 1; i <= l; i++) {
+			n = stx[i]
+			stnames[n] = "x"
+		}
+	}
+	$1 == "status" && $2 == "default" && stnames[$3] != "" {
+		print $3 "=" $4
+	}
+	' states="$states"
 }
 
 # Implement the -t option; list matching types (or all if none specified).
@@ -969,19 +1004,26 @@ then
 	echo "${me}: Creating $dir" 1>&2
 fi
 
-# This is split into two parts to minimize race conditions.
+# Create the directory.  The lock directory is created if -L is omitted
+# from the command line.
+
 statefile="${dir}${sep}.dirq.state"
+mkd="$dir"
 if [ "x$nolock" = "x" ]
 then
 	lockdir="${dir}${sep}.dirq.lock"
-	docleanup=1
-	mkdir "$dir" "$lockdir" && echo "dirq=$state_create" > "$statefile"
-	st=$?
-else
-	docleanup=1
-	mkdir "$dir" && echo "dirq=$state_create" > "$statefile"
-	st=$?
+	mkd="$lockdir"
 fi
+
+# Initialize the new directory's state.
+
+docleanup=1
+mkdir -p "$mkd" &&
+(
+	echo "dirq=$state_create"
+	defvalues "$dirqdat" "$qtype" | grep -v '^dirq='
+) > "$statefile"
+st=$?
 
 if [ $st != 0 ]
 then
