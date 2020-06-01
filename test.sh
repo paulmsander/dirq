@@ -376,7 +376,7 @@ test $? -eq 0 || exitst=2
 
 # Negative test of -f option.
 
-runtest 2 "dirq" -t -f "${TMPDIR}/zyzzy" < /dev/null
+runtest 2 "$dirq" -t -f "${TMPDIR}/zyzzy" < /dev/null
 test $? -eq 0 || exitst=2
 
 # Combine -t with queue type.
