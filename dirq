@@ -509,14 +509,14 @@ quality() {
 			} else if ( priority[idx] == maxpriority ) {
 				# Same priority, raise weight
 				if ( debug ) {
-					print stderr "before wt=" wt " maxweight=" maxweight " weight[" idx "]=" weight[idx]
+					print stderr "before wt=" wt " maxweight=" maxweight " weight[" idx "]=" weight[idx] substr(weight[idx],0,1) "/" substr(weight[idx],0,1) "/" substr(weight[idx],1,1)
 				}
-				if ( substr(weight[idx],0,1 ) == "+" ) {
+				if ( substr(weight[idx],1,1 ) == "+" ) {
 					wt += int(weight[idx])
 					if ( debug ) {
 						print stderr "incremening wt " wt
 					}
-				} else if ( substr(weight[idx],0,1 ) == "-" ) {
+				} else if ( substr(weight[idx],1,1 ) == "-" ) {
 					wt += int(weight[idx])
 					if ( debug ) {
 						print stderr "decrementing wt"
@@ -539,13 +539,16 @@ quality() {
 					}
 				}
 			} else if ( maxpriority == "removable" ) {
+				if ( debug ) {
+					print stderr "before change to persistent wt=" wt " maxweight=" maxweight " weight[" idx "]=" weight[idx] substr(weight[idx],1,1)
+				}
 				# Increase of priority
 				maxpriority = "persistent"
 				status = st
 				value = starray[st]
-				if ( substr(weight[idx],0,1 ) == "+" ) {
+				if ( substr(weight[idx],1,1 ) == "+" ) {
 					wt += int(weight[idx])
-				} else if ( substr(weight[idx],0,1 ) == "-" ) {
+				} else if ( substr(weight[idx],1,1 ) == "-" ) {
 					wt += int(weight[idx])
 				} else {
 					maxweight = wt
@@ -556,7 +559,7 @@ quality() {
 				}
 			}
 			if ( debug ) {
-				print stderr "End of loop:  st=" st " val=" val "wt=" wt " maxweight=" maxweight " maxpri=" maxpriority
+				print stderr "End of loop:  st=" st " val=" value " wt=" wt " maxweight=" maxweight " maxpri=" maxpriority
 			}
 		}
 		if ( wt > maxweight ) {
