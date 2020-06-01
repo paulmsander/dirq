@@ -483,8 +483,14 @@ quality() {
 		if ( ok == 0 ) {
 			exit 2
 		}
-		split(statuslist,starray)
-		for ( i in starray) {
+		stlen = split(statuslist,starray)
+		if ( debug ) {
+			print stderr "statuslist=" statuslist " (" stlen ")"
+			for ( i in starray ) {
+				print stderr "starray[" i "]=" starray[i]
+			}
+		}
+		for ( i = 1; i <= stlen; i++ ) {
 			st = starray[i]
 			if ( debug ) {
 				print stderr "Checking state " st
@@ -548,6 +554,9 @@ quality() {
 				if ( debug ) {
 					print stderr "incpri st=" st " val=" value " wt=" maxweight " maxpri=" maxpriority
 				}
+			}
+			if ( debug ) {
+				print stderr "End of loop:  st=" st " val=" val "wt=" wt " maxweight=" maxweight " maxpri=" maxpriority
 			}
 		}
 		if ( wt > maxweight ) {

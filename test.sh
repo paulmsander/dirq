@@ -648,9 +648,9 @@ test $? -eq 0 || exitst=2
 # Check the weights of the directories.
 
 cat <<EOF |
-${TMPDIR}/t4x/t4#1 removable 60 dirq initialized
-${TMPDIR}/t4x/t4#2 removable 50 dirq initialized
-${TMPDIR}/t4x/t4#3 persistent 2000 dirq initialized
+${TMPDIR}/t4x/t4#1 removable 60 st2 incr2
+${TMPDIR}/t4x/t4#2 removable 50 st2 incr1
+${TMPDIR}/t4x/t4#3 persistent 2000 st2 keep
 EOF
 runtest 0 "$dirq" -f "$dirqdat" -l -w test4
 test $? -eq 0 || exitst=2
