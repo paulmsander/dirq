@@ -1042,7 +1042,7 @@ fi
 
 # Initialize state in the new directory and unlock it.
 
-"$dirqst" -f "$dirqdat" -L "$dir" $initstate "dirq=$state_initialize"
+"$dirqst" -f "$dirqdat" -L "$dir" $initstate "dirq=$state_initialize" > $nulldev
 st=$?
 if [ $st != 0 ]
 then
@@ -1076,7 +1076,7 @@ do
 	lockdir=
 	statefile="${d}${sep}.dirq.state"
 	docleanup=1
-	"$dirqst" -f "$dirqdat" $nolock "$d" "dirq=$state_remove"
+	"$dirqst" -f "$dirqdat" $nolock "$d" "dirq=$state_remove" > $nulldev
 
 	# Remove contents of $dir, leaving locks and state files until the
 	# very last.

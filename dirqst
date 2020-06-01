@@ -210,7 +210,7 @@ else
 				# Entire argument must contain printable characters; no
 				# controls, newlines, etc. are allowed.  First character of
 				# the new state value must be non-blank.
-				expr "x$p" : 'x[A-Za-z][A-Za-z0-9\-_]*=[!-~][ -~]*$' > "$nulldev"
+				expr "x$p" : 'x[A-Za-z][A-Za-z0-9\-_]*=[!-z{}|~][ -z{}|~]*$' > "$nulldev"
 				if [ $? != 0 ]
 				then
 					expr "x$p" : 'x[A-Za-z][A-Za-z0-9\-_]*=$' > "$nulldev"
@@ -367,6 +367,7 @@ then
 				# Edit old state from existing state file
 				echo "/^${id}=/d" >> "$tf2"
 			fi
+			echo "/^${id}=/p" >> "$tf3"
 		else
 			# Argument is state name, edit new state file to display it
 			echo "/^${p}=/p" >> "$tf3"

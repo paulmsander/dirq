@@ -41,3 +41,6 @@ $(MAN5)/%: %
 install: $(FILES)
 	@echo Installation complete.
 
+test:
+	@echo Running test suite...
+	./test.sh
