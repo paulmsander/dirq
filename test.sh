@@ -238,7 +238,7 @@ runtestdirs() {
 	else
 		lsts=0
 		( paste - "$outfile"; echo ) |
-		while read exp lin
+		( while read exp lin
 		do
 			if [ "x$exp" = "x" ]
 			then
@@ -279,7 +279,7 @@ runtestdirs() {
 				passfail 1 "$@: Directory was not deleted: $lin"
 				lsts=1
 			fi
-		done
+		done )
 		retst=$?
 		passfail $retst "$@"
 		return $retst
