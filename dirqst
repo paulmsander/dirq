@@ -210,15 +210,11 @@ else
 				# Entire argument must contain printable characters; no
 				# controls, newlines, etc. are allowed.  First character of
 				# the new state value must be non-blank.
-				expr "x$p" : 'x[A-Za-z][A-Za-z0-9\-_]*=[!-z{}|~][ -z{}|~]*$' > "$nulldev"
-				if [ $? != 0 ]
+				expr "x$p" : 'x[A-Za-z][A-Za-z0-9\-_]*=[ 	][ 	]*$' > "$nulldev"
+				if [ $? -eq 0 ]
 				then
-					expr "x$p" : 'x[A-Za-z][A-Za-z0-9\-_]*=$' > "$nulldev"
-					if [ $? != 0 ]
-					then
-						echo "${me}: Value of $id is invalid." 1>&2
-						bad=1
-					fi
+					echo "${me}: Value of $id is invalid." 1>&2
+					bad=1
 				fi
 			fi
 		done

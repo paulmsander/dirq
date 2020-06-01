@@ -1058,7 +1058,7 @@ fi
 st=$?
 if [ $st != 0 ]
 then
-	echo "${me}: Failed to set dirq state to $state_initialize"
+	echo "${me}: Failed to set dirq state to $state_initialize" 1>&2
 	echo "${me}: Failed to set specified state values in $dir ($st)" 1>&2
 	rm -rf "$dir"
 	exit 2
