@@ -38,6 +38,9 @@ contribute to quality assessments, and their weights.
 Man pages are provided that describe in detail how the tools operate and
 how to configure them.
 
+To run test the test suite, run "make test" and review the output.
+The last line should say "test.sh PASS: FULL TEST SUITE".
+
 To install the dirq package, run "make -n install" and review the output.
 Then become root and run "make install".  Finally, edit the installed
 dirq.dat file as needed.
@@ -50,7 +53,7 @@ History:
 2.0 -- Remove the -d option from the dirq and dirqst programs.  Add
        a sample pipeline queue type to the dirq.dat file, and document it.
        When creating a new directory, initialize all of the state values
-       that contribute to the quality assessment.
+       that contribute to the quality assessment.  Add a test suite.
 
 1.2 -- Added the -N length option to the dirq program to allow the user to
        override the queue length specified in the dirq.dat file.  Also fixed
